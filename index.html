@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Namora comigo?</title>
+  <style>
+    :root{ --bg:#0f172a; --card:#0b1220; --accent:#f472b6; --muted:#94a3b8 }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{
+      background: radial-gradient(1200px 600px at 10% 10%, rgba(244,114,182,0.08), transparent),
+                  radial-gradient(900px 400px at 90% 90%, rgba(99,102,241,0.06), transparent),
+                  var(--bg);
+      color:#e6eef8;display:flex;align-items:center;justify-content:center;padding:32px
+    }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.04);backdrop-filter: blur(6px);
+      width:min(720px,96%);padding:36px;border-radius:16px;box-shadow:0 10px 30px rgba(2,6,23,0.6);text-align:center
+    }
+    h1{font-size:clamp(24px,4vw,40px);margin:0 0 16px;color:var(--accent)}
+    p.lead{margin:0 0 28px;color:var(--muted);font-size:16px}
+    .buttons{display:flex;gap:18px;justify-content:center;align-items:center}
+    button{
+      appearance:none;border:0;padding:14px 22px;border-radius:12px;font-size:18px;cursor:pointer;min-width:120px
+    }
+    button#sim{
+      background:linear-gradient(90deg,#fb7185,#f472b6);color:white;font-weight:600;box-shadow:0 8px 18px rgba(244,114,182,0.18)
+    }
+    button#nao{
+      position:relative;background:#111827;border:1px solid rgba(255,255,255,0.06);color:#dbeafe;font-weight:600;transition:transform .14s ease, box-shadow .14s
+    }
+    /* area that contains the buttons so we can limit the movement */
+    .play-area{position:relative;height:200px;display:flex;align-items:center;justify-content:center}
+    .hint{margin-top:22px;color:var(--muted);font-size:13px}
+    /* small modal */
+    .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.6);backdrop-filter: blur(4px);opacity:0;pointer-events:none;transition:opacity .2s}
+    .modal.show{opacity:1;pointer-events:auto}
+    .modal .box{background:linear-gradient(180deg,#fff 5%, #f8fafc 100%);color:#061123;padding:28px;border-radius:12px;max-width:420px;text-align:center}
+    .modal h2{margin:0 0 8px}
+    .close{margin-top:12px;padding:10px 14px;border-radius:10px;background:#0b1220;color:#fff;border:0;cursor:pointer}
+    /* fun sparkle following the acceptance */
+    .hearts{position:absolute;pointer-events:none;inset:0}
+    .heart{position:absolute;font-size:22px;opacity:0;transform:translateY(0) scale(.6)}
+    @keyframes floatUp{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(-140px) scale(.6)} }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Namora comigo?</h1>
+    <p class="lead">Escolha uma opção — mas atenção: a resposta "Não" tem vontade própria.</p>
+
+    <div class="play-area" id="playArea">
+      <div class="buttons">
+        <button id="sim">Sim ❤️</button>
+        <button id="nao">Não ❌</button>
+      </div>
+      <div class="hearts" id="hearts"></div>
+    </div>
+
+    <div class="hint">Dica: tente clicar no "Não" (boa sorte 😂)</div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="box">
+      <h2>Resposta aceita 💖</h2>
+      <p>Que alegria — vamos dar um passo juntos!</p>
+      <button class="close" id="closeModal">Fechar</button>
+    </div>
+  </div>
+
+  <script>
+    // Elementos
+    const nao = document.getElementById('nao');
+    const sim = document.getElementById('sim');
+    const area = document.getElementById('playArea');
+    const hearts = document.getElementById('hearts');
+    const modal = document.getElementById('modal');
+    const closeModal = document.getElementById('closeModal');
+
+    // Mantemos a posição do botão em porcentagem dentro da play area
+    let naoPos = { x: 50, y: 50 };
+
+    function placeNao() {
+      // calcula posição em px com base na area
+      const rect = area.getBoundingClientRect();
+      const btnRect = nao.getBoundingClientRect();
+      const left = rect.left + (naoPos.x/100) * (rect.width - btnRect.width);
+      const top  = rect.top  + (naoPos.y/100) * (rect.height - btnRect.height);
+      nao.style.transform = `translate(${left - rect.left}px, ${top - rect.top}px)`;
+    }
+
+    // Inicial
+    placeNao();
+
+    // Ao movimentar o mouse na área, o botão 'Não' foge quando o cursor chega perto
+    area.addEventListener('mousemove', (e) => {
+      const rect = area.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const btnRect = nao.getBoundingClientRect();
+      const btnX = (naoPos.x/100) * (rect.width - btnRect.width) + btnRect.width/2;
+      const btnY = (naoPos.y/100) * (rect.height - btnRect.height) + btnRect.height/2;
+
+      const dx = mx - btnX;
+      const dy = my - btnY;
+      const dist = Math.hypot(dx, dy);
+
+      const triggerDistance = 110; // px
+      if (dist < triggerDistance) {
+        // calcula vetor de fuga normalizado e multiplica por intensidade
+        const intensity = Math.min(1, (triggerDistance - dist) / triggerDistance);
+        const fleeX = (dx / (dist || 1)) * -1; // oposto
+        const fleeY = (dy / (dist || 1)) * -1;
+
+        // atualiza porcentagens (quanto maior, mais se move)
+        naoPos.x = clamp(naoPos.x + fleeX * intensity * 12, 0, 100);
+        naoPos.y = clamp(naoPos.y + fleeY * intensity * 8, 0, 100);
+        placeNao();
+      }
+    });
+
+    // se o usuário tocar (mobile), movemos o botão aleatoriamente
+    area.addEventListener('touchstart', (e) => {
+      naoPos.x = Math.random()*100;
+      naoPos.y = Math.random()*100;
+      placeNao();
+    }, {passive:true});
+
+    // evita que o botão seja clicado facilmente: se o mouse entrar sobre ele, pula pra outra posição
+    nao.addEventListener('mouseenter', () => {
+      naoPos.x = Math.random()*100;
+      naoPos.y = Math.random()*100;
+      placeNao();
+    });
+
+    // mesmo que o usuário tente clicar, deslocamos imediatamente
+    nao.addEventListener('click', (e) => {
+      e.preventDefault();
+      naoPos.x = Math.random()*100;
+      naoPos.y = Math.random()*100;
+      placeNao();
+    });
+
+    // botão Sim: mostra modal e pequenos coraÃ§Ãµes animados
+    sim.addEventListener('click', () => {
+      modal.classList.add('show');
+      // criar alguns corações
+      for (let i=0;i<12;i++) {
+        createHeart();
+      }
+    });
+
+    closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
+
+    // helpers
+    function clamp(v,a,b){return Math.max(a, Math.min(b, v));}
+
+    function createHeart(){
+      const el = document.createElement('div');
+      el.className = 'heart';
+      el.textContent = ['💖','💘','❣️','❤️'][Math.floor(Math.random()*4)];
+      const rw = area.clientWidth;
+      const rh = area.clientHeight;
+      el.style.left = Math.random()*rw + 'px';
+      el.style.top = rh + 'px';
+      hearts.appendChild(el);
+      // animação manual
+      const animDuration = 1600 + Math.random()*1200;
+      el.style.transition = `transform ${animDuration}ms ease-out, opacity ${animDuration}ms ease-out, top ${animDuration}ms ease-out`;
+      requestAnimationFrame(()=>{
+        el.style.opacity = '1';
+        const offsetX = (Math.random()-0.5)*100;
+        el.style.transform = `translate(${offsetX}px, -${120 + Math.random()*80}px) scale(1)`;
+      });
+      setTimeout(()=>{
+        el.style.opacity = '0';
+      }, animDuration - 200);
+      setTimeout(()=> el.remove(), animDuration+50);
+    }
+
+    // reposicionar no resize
+    window.addEventListener('resize', placeNao);
+
+    // colocar o nao no centro quando a página carrega corretamente
+    window.addEventListener('load', () => {
+      naoPos = { x: 62, y: 50 };
+      placeNao();
+    });
+  </script>
+</body>
+</html>
